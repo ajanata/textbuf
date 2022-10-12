@@ -2,14 +2,14 @@ package textbuf
 
 import (
 	"errors"
-
 	font "github.com/ajanata/oled_font"
 	"tinygo.org/x/drivers"
 )
 
 type Buffer struct {
-	dev        drivers.Displayer
-	disp       font.Display
+	dev  drivers.Displayer
+	disp font.Display
+	// high bit set = inverse video
 	buf        [][]byte
 	width      int16
 	height     int16
@@ -28,6 +28,8 @@ const (
 	FontSize16x26 = font.FONT_16x26
 )
 
+const inverseMask uint8 = 0b1000_0000
+
 func New(dev drivers.Displayer, size FontSize) (*Buffer, error) {
 	var fw, fh int16
 	switch size {
@@ -45,8 +47,8 @@ func New(dev drivers.Displayer, size FontSize) (*Buffer, error) {
 
 	sw, sh := dev.Size()
 
-	w := sw / (fw + 1)
-	h := sh / (fh + 1)
+	w := sw / fw
+	h := sh / fh
 
 	buf := make([][]byte, h)
 	for i := int16(0); i < h; i++ {
@@ -71,10 +73,17 @@ func (b *Buffer) Display() error {
 	for i := range b.buf {
 		b.disp.XPos = 0
 		for j := range b.buf[i] {
-			b.disp.PrintChar(b.buf[i][j])
-			b.disp.XPos += b.fontWidth + 1
+			ch := b.buf[i][j]
+			inverse := ch&inverseMask == inverseMask
+			ch &^= inverseMask
+			if inverse {
+				b.disp.PrintCharInverse(ch)
+			} else {
+				b.disp.PrintChar(ch)
+			}
+			b.disp.XPos += b.fontWidth
 		}
-		b.disp.YPos += b.fontHeight + 1
+		b.disp.YPos += b.fontHeight
 	}
 
 	return b.dev.Display()
@@ -107,14 +116,15 @@ func (b *Buffer) Size() (int16, int16) {
 	return b.width, b.height
 }
 
-func sanitize(ch byte) byte {
-	if ch < ' ' || ch > '~' {
-		return '?'
-	}
-	return ch
+func (b *Buffer) SetLine(line int16, text string) error {
+	return b.setLine(line, text, false)
 }
 
-func (b *Buffer) SetLine(line int16, text string) error {
+func (b *Buffer) SetLineInverse(line int16, text string) error {
+	return b.setLine(line, text, true)
+}
+
+func (b *Buffer) setLine(line int16, text string, inverse bool) error {
 	if line > b.height {
 		return errors.New("not that many lines")
 	}
@@ -124,7 +134,10 @@ func (b *Buffer) SetLine(line int16, text string) error {
 		if i < len(text) {
 			ch = text[i]
 		}
-		b.buf[line][i] = sanitize(ch)
+		if inverse {
+			ch |= inverseMask
+		}
+		b.buf[line][i] = ch
 	}
 	return b.Display()
 }
@@ -133,15 +146,27 @@ func (b *Buffer) Println(text string) error {
 	return b.Print(text + "\n")
 }
 
+func (b *Buffer) PrintlnInverse(text string) error {
+	return b.PrintInverse(text + "\n")
+}
+
 func (b *Buffer) Print(text string) error {
-	err := b.print(text)
+	err := b.print(text, false)
 	if err != nil {
 		return err
 	}
 	return b.Display()
 }
 
-func (b *Buffer) print(text string) error {
+func (b *Buffer) PrintInverse(text string) error {
+	err := b.print(text, true)
+	if err != nil {
+		return err
+	}
+	return b.Display()
+}
+
+func (b *Buffer) print(text string, inverse bool) error {
 	for i := 0; i < len(text); i++ {
 		ch := text[i]
 		switch ch {
@@ -158,23 +183,25 @@ func (b *Buffer) print(text string) error {
 				b.y++
 			}
 		case '\t':
-			err := b.print("  ")
+			err := b.print("  ", inverse)
 			if err != nil {
 				return err
 			}
 		default:
-			err := b.putc(ch)
+			err := b.putc(ch, inverse)
 			if err != nil {
 				return err
 			}
 		}
 	}
-
 	return nil
 }
 
-func (b *Buffer) putc(ch byte) error {
-	b.buf[b.y][b.x] = sanitize(ch)
+func (b *Buffer) putc(ch byte, inverse bool) error {
+	if inverse {
+		ch |= inverseMask
+	}
+	b.buf[b.y][b.x] = ch
 	b.x++
 	if b.x == b.width {
 		b.x = 0

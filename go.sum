@@ -1,5 +1,5 @@
-github.com/ajanata/oled_font v1.1.0 h1:8b4AdUkT0tsz5mhSe3Xvhk3l1NgMrBoWHXYAbgrgBNc=
-github.com/ajanata/oled_font v1.1.0/go.mod h1:n6gYqd0ph+soDNitgGucYMQomt87OgF905cMbDBQnQ8=
+github.com/ajanata/oled_font v1.2.0 h1:v7eMZ85qTZOcc7tzm5uHJMekZN0K12okwz7nc5j0CGE=
+github.com/ajanata/oled_font v1.2.0/go.mod h1:n6gYqd0ph+soDNitgGucYMQomt87OgF905cMbDBQnQ8=
 github.com/bgould/http v0.0.0-20190627042742-d268792bdee7/go.mod h1:BTqvVegvwifopl4KTEDth6Zezs9eR+lCWhvGKvkxJHE=
 github.com/eclipse/paho.mqtt.golang v1.2.0/go.mod h1:H9keYFcgq3Qr5OUJm/JZI/i6U7joQ8SYLhZwfeOo6Ts=
 github.com/frankban/quicktest v1.10.2/go.mod h1:K+q6oSqb0W0Ininfk863uOk1lMy69l/P6txr3mVT54s=

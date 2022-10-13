@@ -2,6 +2,7 @@ package textbuf
 
 import (
 	"errors"
+
 	font "github.com/ajanata/oled_font"
 	"tinygo.org/x/drivers"
 )
@@ -76,11 +77,7 @@ func (b *Buffer) Display() error {
 			ch := b.buf[i][j]
 			inverse := ch&inverseMask == inverseMask
 			ch &^= inverseMask
-			if inverse {
-				b.disp.PrintCharInverse(ch)
-			} else {
-				b.disp.PrintChar(ch)
-			}
+			b.disp.PrintCharEx(ch, inverse)
 			b.disp.XPos += b.fontWidth
 		}
 		b.disp.YPos += b.fontHeight

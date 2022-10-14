@@ -213,3 +213,27 @@ func (b *Buffer) putc(ch byte, inverse bool) error {
 	}
 	return nil
 }
+
+func (b *Buffer) X() int16 {
+	return b.x
+}
+
+func (b *Buffer) SetX(x int16) error {
+	if x < 0 || x > b.width-1 {
+		return errors.New("out of range")
+	}
+	b.x = x
+	return nil
+}
+
+func (b *Buffer) Y() int16 {
+	return b.y
+}
+
+func (b *Buffer) SetY(y int16) error {
+	if y < 0 || y > b.height-1 {
+		return errors.New("out of range")
+	}
+	b.y = y
+	return nil
+}

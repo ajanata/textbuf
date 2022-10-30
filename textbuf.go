@@ -69,18 +69,23 @@ func New(dev drivers.Displayer, size FontSize) (*Buffer, error) {
 	return &b, b.Clear()
 }
 
+func (b *Buffer) displayLine(line int16) {
+	b.disp.YPos = line * b.fontHeight
+	b.disp.XPos = 0
+	for i := range b.buf[line] {
+		ch := b.buf[line][i]
+		inverse := ch&inverseMask == inverseMask
+		ch &^= inverseMask
+		b.disp.PrintCharEx(ch, inverse)
+		b.disp.XPos += b.fontWidth
+	}
+	b.disp.YPos += b.fontHeight
+}
+
 func (b *Buffer) Display() error {
 	b.disp.YPos = 0
 	for i := range b.buf {
-		b.disp.XPos = 0
-		for j := range b.buf[i] {
-			ch := b.buf[i][j]
-			inverse := ch&inverseMask == inverseMask
-			ch &^= inverseMask
-			b.disp.PrintCharEx(ch, inverse)
-			b.disp.XPos += b.fontWidth
-		}
-		b.disp.YPos += b.fontHeight
+		b.displayLine(int16(i))
 	}
 
 	return b.dev.Display()
@@ -136,7 +141,9 @@ func (b *Buffer) setLine(line int16, text string, inverse bool) error {
 		}
 		b.buf[line][i] = ch
 	}
-	return b.Display()
+	// only redraw this line; don't waste time re-rendering the other lines that haven't changed
+	b.displayLine(line)
+	return b.dev.Display()
 }
 
 func (b *Buffer) Println(text string) error {

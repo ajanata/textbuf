@@ -8,10 +8,13 @@ import (
 )
 
 type Buffer struct {
-	dev  drivers.Displayer
-	disp font.Display
+	AutoFlush bool
+	dev       drivers.Displayer
+	disp      font.Display
 	// high bit set = inverse video
 	buf        [][]byte
+	drawAll    bool
+	draw       []bool
 	width      int16
 	height     int16
 	fontWidth  int16
@@ -59,6 +62,7 @@ func New(dev drivers.Displayer, size FontSize) (*Buffer, error) {
 	b := Buffer{
 		dev:        dev,
 		disp:       font.NewDisplay(dev),
+		draw:       make([]bool, h),
 		buf:        buf,
 		width:      w,
 		height:     h,
@@ -66,10 +70,11 @@ func New(dev drivers.Displayer, size FontSize) (*Buffer, error) {
 		fontHeight: fh,
 	}
 	b.disp.Configure(font.Config{FontType: uint8(size)})
-	return &b, b.Clear()
+	b.Clear()
+	return &b, b.Display()
 }
 
-func (b *Buffer) displayLine(line int16) {
+func (b *Buffer) drawLine(line int16) {
 	b.disp.YPos = line * b.fontHeight
 	b.disp.XPos = 0
 	for i := range b.buf[line] {
@@ -84,25 +89,36 @@ func (b *Buffer) displayLine(line int16) {
 
 func (b *Buffer) Display() error {
 	b.disp.YPos = 0
+	update := false
 	for i := range b.buf {
-		b.displayLine(int16(i))
+		if b.drawAll || b.draw[i] {
+			b.draw[i] = false
+			b.drawLine(int16(i))
+			update = true
+		}
 	}
+	b.drawAll = false
 
-	return b.dev.Display()
+	if update {
+		return b.dev.Display()
+	} else {
+		return nil
+	}
 }
 
-func (b *Buffer) Clear() error {
+func (b *Buffer) Clear() {
+	b.drawAll = true
 	b.x, b.y = 0, 0
 	for i := range b.buf {
 		for j := range b.buf[i] {
 			b.buf[i][j] = ' '
 		}
 	}
-	return b.Display()
 }
 
 // Scroll moves each line of the display up by one and blanks the last line.
-func (b *Buffer) Scroll() error {
+func (b *Buffer) Scroll() {
+	b.drawAll = true
 	for i := 1; i < len(b.buf); i++ {
 		copy(b.buf[i-1], b.buf[i])
 	}
@@ -110,7 +126,6 @@ func (b *Buffer) Scroll() error {
 	for i := range b.buf[last] {
 		b.buf[last][i] = ' '
 	}
-	return b.Display()
 }
 
 // Size returns the number of columns and rows of text on the display.
@@ -141,9 +156,11 @@ func (b *Buffer) setLine(line int16, text string, inverse bool) error {
 		}
 		b.buf[line][i] = ch
 	}
-	// only redraw this line; don't waste time re-rendering the other lines that haven't changed
-	b.displayLine(line)
-	return b.dev.Display()
+	b.draw[line] = true
+	if b.AutoFlush {
+		return b.Display()
+	}
+	return nil
 }
 
 func (b *Buffer) Println(text string) error {
@@ -155,19 +172,11 @@ func (b *Buffer) PrintlnInverse(text string) error {
 }
 
 func (b *Buffer) Print(text string) error {
-	err := b.print(text, false)
-	if err != nil {
-		return err
-	}
-	return b.Display()
+	return b.print(text, false)
 }
 
 func (b *Buffer) PrintInverse(text string) error {
-	err := b.print(text, true)
-	if err != nil {
-		return err
-	}
-	return b.Display()
+	return b.print(text, true)
 }
 
 func (b *Buffer) print(text string, inverse bool) error {
@@ -177,14 +186,14 @@ func (b *Buffer) print(text string, inverse bool) error {
 		case '\r':
 			continue
 		case '\n':
-			b.x = 0
-			if b.y == b.height-1 {
-				err := b.Scroll()
-				if err != nil {
-					return err
+			// make sure we didn't automatically line-wrap with the last character
+			if !(i > 0 && b.x == 0) {
+				b.x = 0
+				if b.y == b.height-1 {
+					b.Scroll()
+				} else {
+					b.y++
 				}
-			} else {
-				b.y++
 			}
 		case '\t':
 			err := b.print("  ", inverse)
@@ -198,6 +207,9 @@ func (b *Buffer) print(text string, inverse bool) error {
 			}
 		}
 	}
+	if b.AutoFlush {
+		return b.Display()
+	}
 	return nil
 }
 
@@ -206,14 +218,12 @@ func (b *Buffer) putc(ch byte, inverse bool) error {
 		ch |= inverseMask
 	}
 	b.buf[b.y][b.x] = ch
+	b.draw[b.y] = true
 	b.x++
 	if b.x == b.width {
 		b.x = 0
 		if b.y == b.height-1 {
-			err := b.Scroll()
-			if err != nil {
-				return err
-			}
+			b.Scroll()
 		} else {
 			b.y++
 		}

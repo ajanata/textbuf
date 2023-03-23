@@ -7,6 +7,8 @@ import (
 	"tinygo.org/x/drivers"
 )
 
+// TODO make ...text versions of the print funcs to allow callers to avoid string concatenation (which allocates)
+
 type Buffer struct {
 	AutoFlush bool
 	dev       drivers.Displayer
@@ -133,23 +135,37 @@ func (b *Buffer) Size() (int16, int16) {
 	return b.width, b.height
 }
 
-func (b *Buffer) SetLine(line int16, text string) error {
-	return b.setLine(line, text, false)
+func (b *Buffer) SetLine(line int16, text ...string) error {
+	return b.setLine(line, false, text...)
 }
 
-func (b *Buffer) SetLineInverse(line int16, text string) error {
-	return b.setLine(line, text, true)
+func (b *Buffer) SetLineInverse(line int16, text ...string) error {
+	return b.setLine(line, true, text...)
 }
 
-func (b *Buffer) setLine(line int16, text string, inverse bool) error {
+func (b *Buffer) setLine(line int16, inverse bool, text ...string) error {
 	if line > b.height {
 		return errors.New("not that many lines")
 	}
+
+	for i := 0; int16(i) < b.width; i++ {
+		b.buf[line][i] = ' '
+	}
+	si := 0
+	sl := 0
 	// TODO handle strings longer than the screen width?
 	for i := 0; int16(i) < b.width; i++ {
 		var ch byte = ' '
-		if i < len(text) {
-			ch = text[i]
+
+	next:
+		if si < len(text) {
+			if i < len(text[si])+sl {
+				ch = text[si][i-sl]
+			} else {
+				sl += len(text[si])
+				si++
+				goto next
+			}
 		}
 		if inverse {
 			ch |= inverseMask
